@@ -1,6 +1,6 @@
 # flow
 
-A proof-of-concept CI/CD pipeline using **GitHub Actions**, demonstrating a clean separation of concerns across three independent workflows: continuous integration, image release, and manual deployment.
+A proof-of-concept CI/CD pipeline using **GitHub Actions**, demonstrating a clean separation of concerns across three independent workflows: continuous integration, image release, and manual deployment by environment.
 
 ---
 
@@ -60,7 +60,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The `release.yml` workflow fires automatically, builds the image and pushes it to ACR.
+The `release.yml` workflow fires automatically, builds the image, and pushes it to ACR.
 
 ### 2. Deploy to an environment
 
@@ -107,3 +107,5 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 ## Documentation
 
 See [`.github/PIPELINE.md`](.github/PIPELINE.md) for full pipeline documentation.
+
+
