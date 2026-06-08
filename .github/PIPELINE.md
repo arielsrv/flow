@@ -24,6 +24,7 @@ push / PR
 ```
 
 **Steps:**
+
 1. Checkout
 2. Context info (PR vs direct push)
 3. Simulated build
@@ -47,6 +48,7 @@ git push origin v1.2.3
 ```
 
 **Steps:**
+
 1. Extract tag metadata
 2. Simulated production build
 3. Simulated ACR login
@@ -71,12 +73,14 @@ git push origin v1.2.3
 **Trigger:** `workflow_dispatch` (Actions → Run workflow)
 
 **Use it for:**
+
 - Deploying a published tag to a specific environment
 - Rolling back to a previous version
 - Emergency deployments
 - Targeted environment testing
 
 **How to use:**
+
 1. Actions → **Deploy Manual** → **Run workflow**
 2. **"Use workflow from"** → **Tag** → select the tag (e.g. `v1.2.3`)
 3. Select the **target environment**
@@ -91,6 +95,7 @@ from the "Use workflow from" selection. No text input needed.
 | `environment` | **environment** | Dropdown with the repo's configured environments |
 
 **Jobs:**
+
 1. `validate-tag` → verifies the workflow was triggered from a tag (not a branch)
 2. `deploy` → deploys to the selected environment, respecting its protection rules
 
@@ -104,20 +109,20 @@ For environment gates to work, configure them at:
 
 ### Recommended environments
 
-| Environment | Protection rules |
-|-------------|-----------------|
-| `development` | None (automatic deploy) |
-| `staging` | Wait timer: 5 min |
-| `production` | Required reviewers: 1+ approver |
+| Environment   | Protection rules                |
+|---------------|---------------------------------|
+| `development` | None (automatic deploy)         |
+| `staging`     | Wait timer: 5 min               |
+| `production`  | Required reviewers: 1+ approver |
 
 ### How to add protection rules
 
 1. Go to **Settings → Environments**
 2. Select the environment
 3. Under **Deployment protection rules**:
-   - ✅ **Required reviewers** → add users/teams as approvers
-   - ✅ **Wait timer** → minutes to wait before executing
-   - ✅ **Restrict deployments to protected branches** → only from `main`/tags
+    - ✅ **Required reviewers** → add users/teams as approvers
+    - ✅ **Wait timer** → minutes to wait before executing
+    - ✅ **Restrict deployments to protected branches** → only from `main`/tags
 
 ---
 
@@ -135,9 +140,9 @@ env:
 
 Add under **Settings → Secrets and variables → Actions**:
 
-| Secret | Description |
-|--------|-------------|
-| `AZURE_CLIENT_ID` | Service Principal for Azure login |
-| `AZURE_CLIENT_SECRET` | Service Principal credentials |
-| `AZURE_TENANT_ID` | Azure AD tenant |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription |
+| Secret                  | Description                       |
+|-------------------------|-----------------------------------|
+| `AZURE_CLIENT_ID`       | Service Principal for Azure login |
+| `AZURE_CLIENT_SECRET`   | Service Principal credentials     |
+| `AZURE_TENANT_ID`       | Azure AD tenant                   |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription                |
