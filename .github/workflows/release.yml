@@ -1,4 +1,5 @@
-name: 🚀 Create artifact
+name: 🚀 Release
+run-name: "Release ${{ inputs.tag }} — ${{ github.ref_name }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER
