@@ -18,8 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "🏷️ Tag name (e.g. v1.0, v1.2.3, v2.0.0-beta)"
+        description: "Tag name (e.g. v1.0, v1.2.3, v2.0.0-beta)"
         required: true
+        type: string
 
 env:
   ACR_NAME: myregistry
