@@ -1,122 +1,111 @@
 # 🚀 CI/CD Pipeline — Documentación
 
-## Diagrama de flujo
+## Arquitectura: 3 workflows independientes
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        TRIGGERS                                      │
-├──────────────────┬──────────────────┬───────────────────────────────┤
-│  push → main     │  PR → main       │  tag v*.*.*                   │
-│  pull_request    │                  │  workflow_dispatch (manual)    │
-└────────┬─────────┴────────┬─────────┴──────────────┬────────────────┘
-         │                  │                          │
-         ▼                  ▼                          ▼
-  ┌─────────────┐    ┌─────────────┐          ┌──────────────────────┐
-  │ 🔨 Compile  │    │ 🔨 Compile  │          │ 🐳 Build & Push ACR  │
-  │ 🧪 Test     │    │ 🧪 Test     │          │   (simulado)         │
-  └─────────────┘    └─────────────┘          └──────────┬───────────┘
-                                                          │
-                                              ┌───────────▼───────────┐
-                                              │  📌 Imagen disponible  │
-                                              │  en ACR con tag v*.*.*  │
-                                              └───────────────────────┘
-
-  ─────────────────── DEPLOY MANUAL (workflow_dispatch) ──────────────
-
-  Inputs requeridos:
-    • tag         → ej: v1.2.3  (podés ver los disponibles en el primer job)
-    • environment → elegido del selector (auto-descubre los del repo)
-
-  ┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────────────────────┐
-  │ 🏷️ Discover Tags     │     │ 🔍 Discover Envs     │────▶│ 🚀 Deploy → [environment]            │
-  │ (últimos 10, GitHub  │     │ (GitHub API)         │     │  ├─ 🔐 Autenticación Azure           │
-  │  API, valida input)  │     └──────────────────────┘     │  ├─ 📥 Pull imagen ACR               │
-  └──────────────────────┘                                   │  ├─ 🚀 Deploy Container App         │
-                                                             │  └─ 🏥 Health check                 │
-                                                             └──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  pipeline.yml          │  release.yml             │  deploy.yml             │
+│  🔨 CI                 │  🚀 Release              │  🔧 Deploy Manual       │
+├────────────────────────┼──────────────────────────┼─────────────────────────┤
+│  push → main           │  tag v*.*.*              │  workflow_dispatch      │
+│  PR → main             │                          │  (manual)               │
+└────────────────────────┴──────────────────────────┴─────────────────────────┘
 ```
 
 ---
 
-## Jobs
+## 1 · `pipeline.yml` — 🔨 CI
 
-### 1 · 🔨 `ci` — Compile & Test
+**Trigger:** push a `main` o PR contra `main`
 
-**Se ejecuta cuando:**
-- Push directo a `main`
-- Pull Request cuyo destino es `main`
+```
+push/PR
+  └─▶ 🔨 Compile & Test
+```
 
 **Pasos:**
-1. Checkout del código
+1. Checkout
 2. Info del contexto (PR vs push directo)
 3. Compilación simulada
-4. Ejecución de tests simulada (42 unit + 8 integration)
-5. Resumen en GitHub Step Summary
+4. Tests simulados (42 unit + 8 integration)
+5. Step Summary
 
 ---
 
-### 2 · 🐳 `build-and-push` — Build & Push a ACR
+## 2 · `release.yml` — 🚀 Release (estilo GitLab)
 
-**Se ejecuta cuando:**
-- Se crea un tag con el patrón `v[0-9]+.[0-9]+.[0-9]+` (ej: `v1.2.3`)
+**Trigger:** push de tag `v[0-9]+.[0-9]+.[0-9]+`
 
-**Cómo crear un tag:**
+```
+git tag v1.2.3
+git push origin v1.2.3
+       │
+       ▼
+┌─────────────────┐
+│ 🐳 build-push   │  build + push imagen al ACR
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 🟢 development  │  deploy automático (sin gates)
+└────────┬────────┘
+         │  (gate: protection rules de GitHub Environment)
+         ▼
+┌─────────────────┐
+│ 🟡 staging      │  deploy con gate opcional (wait timer / approval)
+└────────┬────────┘
+         │  (gate: protection rules de GitHub Environment)
+         ▼
+┌─────────────────┐
+│ 🔴 production   │  deploy con gate (required reviewers)
+└─────────────────┘
+```
+
+**Sin intervención manual** — el tag dispara todo el pipeline.
+Los gates entre entornos se configuran en **Settings → Environments**.
+
+### Cómo crear un release
+
 ```bash
 git tag v1.2.3
 git push origin v1.2.3
 ```
 
-**Pasos:**
-1. Extraer metadata del tag
-2. Build de producción simulado
-3. Login en ACR simulado
-4. `docker build` simulado
-5. `docker push` simulado (tag + `latest`)
-6. Resumen con info de la imagen publicada
-
-> Para conectar el ACR real, reemplazar los pasos con `azure/docker-login@v2`
-> y agregar los secrets `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`.
-
 ---
 
-### 3 · 🚀 `deploy` — Deploy Manual
+## 3 · `deploy.yml` — 🔧 Deploy Manual
 
-**Se ejecuta cuando:**
-- Se dispara manualmente desde **Actions → Run workflow**
+**Trigger:** `workflow_dispatch` (Actions → Run workflow)
+
+**Úsalo para:**
+- Re-deploy de un tag ya publicado
+- Rollback a una versión anterior
+- Deploy de emergencia a un entorno específico
+- Pruebas puntuales
 
 **Inputs:**
 | Input | Tipo | Descripción |
 |-------|------|-------------|
-| `tag` | string | Tag de la imagen a desplegar (ej: `v1.2.3`) — los últimos 10 se listan en el primer job |
-| `environment` | **environment** | Selector que muestra los environments del repo |
+| `tag` | string | Tag a desplegar — los últimos 10 se listan en el primer job |
+| `environment` | **environment** | Selector con los environments del repo |
 
-> ℹ️ El input `type: environment` hace que GitHub muestre automáticamente
-> un dropdown con todos los environments configurados en **Settings → Environments**.
-
-> ℹ️ El input `tag` es texto libre. Como GitHub Actions **no soporta dropdowns dinámicos**
-> en `workflow_dispatch`, el job `discover-tags` consulta la API al inicio y muestra los
-> últimos 10 tags en el **Step Summary**, resaltando el que ingresaste. También valida
-> que exista y avisa si hay un posible error tipográfico.
-
-**Pasos:**
-1. `discover-tags` → consulta la GitHub API, lista los últimos 10 tags, valida que el tag ingresado exista y lo resalta en el Step Summary
-2. `discover-environments` → consulta la GitHub API y lista los entornos disponibles
-3. `deploy` → valida el entorno, despliega y hace health check
-   - Si el environment tiene **protection rules** (required reviewers, wait timer), GitHub
-     pausará el job hasta que alguien apruebe antes de continuar.
+**Jobs:**
+1. `discover-tags` → lista últimos 10 tags, valida el ingresado
+2. `discover-environments` → lista environments del repo
+3. `deploy` → valida entorno, despliega, health check
 
 ---
 
 ## Configurar GitHub Environments
 
-Para que el deploy manual funcione correctamente, configurá los environments en:
+Para que los gates del `release.yml` funcionen, configurá los environments en:
 
 **Settings → Environments → New environment**
 
-### Environments sugeridos
+### Environments recomendados
 
-| Environment | Protection rules recomendadas |
-|-------------|-------------------------------|
+| Environment | Protection rules |
+|-------------|-----------------|
 | `development` | Ninguna (deploy automático) |
 | `staging` | Wait timer: 5 min |
 | `production` | Required reviewers: 1+ aprobador |
@@ -134,7 +123,7 @@ Para que el deploy manual funcione correctamente, configurá los environments en
 
 ## Variables a personalizar
 
-En el archivo `pipeline.yml`, ajustar las variables globales:
+En `release.yml` y `deploy.yml`, ajustar:
 
 ```yaml
 env:
@@ -152,4 +141,3 @@ Agregar en **Settings → Secrets and variables → Actions**:
 | `AZURE_CLIENT_SECRET` | Credencial del Service Principal |
 | `AZURE_TENANT_ID` | Tenant de Azure AD |
 | `AZURE_SUBSCRIPTION_ID` | Suscripción de Azure |
-

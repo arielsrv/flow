@@ -1,0 +1,113 @@
+name: 🚀 Release
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER
+#   • push de tag v*.*.*  → build + push ACR
+#
+# Una vez publicada la imagen, desplegá desde el workflow "Deploy Manual"
+# seleccionando únicamente el entorno destino.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  ACR_NAME: myregistry
+  IMAGE_NAME: my-app
+
+jobs:
+
+  build-and-push:
+    name: 🐳 Build & Push → ACR
+    runs-on: ubuntu-latest
+
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag:   ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔖 Extraer metadata del tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}"
+          echo "tag=${TAG}"     >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "📌 Tag detectado : ${TAG}"
+          echo "🖼️  Imagen destino : ${IMAGE}:${TAG}"
+
+      - name: 📦 Compilar para producción (simulado)
+        run: |
+          echo ""
+          echo "🔨 Build de producción..."
+          echo "  → [1/4] Resolviendo dependencias ............. ✅"
+          sleep 1
+          echo "  → [2/4] Compilando en modo RELEASE ........... ✅"
+          sleep 1
+          echo "  → [3/4] Ejecutando tests pre-empaquetado ..... ✅"
+          sleep 1
+          echo "  → [4/4] Generando artefacto final ............ ✅"
+          echo ""
+          echo "✅ Build de producción listo"
+
+      - name: 🔐 Login en ACR (simulado)
+        run: |
+          echo ""
+          echo "🔐 Autenticando en Azure Container Registry..."
+          echo "  → az acr login --name ${{ env.ACR_NAME }}"
+          echo "✅ Sesión iniciada en ${{ env.ACR_NAME }}.azurecr.io"
+
+      - name: 🐳 Docker build (simulado)
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          echo ""
+          echo "🐳 Construyendo imagen Docker..."
+          echo "  → docker build \\"
+          echo "       --platform linux/amd64 \\"
+          echo "       --label org.opencontainers.image.revision=${{ github.sha }} \\"
+          echo "       --label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \\"
+          echo "       -t ${IMAGE}:${TAG} \\"
+          echo "       -t ${IMAGE}:latest \\"
+          echo "       ."
+          sleep 2
+          echo ""
+          echo "✅ Imagen construida:"
+          echo "   • ${IMAGE}:${TAG}"
+          echo "   • ${IMAGE}:latest"
+
+      - name: 📤 Docker push a ACR (simulado)
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          echo ""
+          echo "📤 Publicando imagen en ACR..."
+          echo "  → docker push ${IMAGE}:${TAG}"
+          sleep 1
+          echo "     Pushed: sha256:a1b2c3d4e5f6..."
+          echo "  → docker push ${IMAGE}:latest"
+          sleep 1
+          echo "     Pushed: sha256:a1b2c3d4e5f6..."
+          echo ""
+          echo "✅ Imagen publicada exitosamente"
+
+      - name: 📋 Resumen del build
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          echo "## 🐳 Imagen publicada en ACR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${{ env.ACR_NAME }}.azurecr.io\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Imagen** | \`${IMAGE}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Publicado por** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ✅ Imagen lista. Para desplegar, ejecutá el workflow **Deploy Manual** y seleccioná el entorno." >> $GITHUB_STEP_SUMMARY

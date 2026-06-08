@@ -1,0 +1,190 @@
+name: 🔧 Deploy Manual
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER
+#   • workflow_dispatch → seleccionás solo el entorno
+#     El tag se detecta automáticamente del último release publicado
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "🌍 Entorno de despliegue"
+        required: true
+        type: environment   # ← GitHub lista automáticamente los environments del repo
+
+env:
+  ACR_NAME: myregistry
+  IMAGE_NAME: my-app
+
+jobs:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1 · Resolver el tag a desplegar
+  #   Obtiene automáticamente el último tag publicado en el repositorio
+  # ───────────────────────────────────────────────────────────────────────────
+  resolve-tag:
+    name: 🔖 Resolver último tag
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: 📡 Obtener último tag via GitHub API
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo ""
+          echo "📡 Consultando último tag del repositorio..."
+          echo "   Repo: ${{ github.repository }}"
+          echo ""
+
+          LATEST=$(gh api \
+            "repos/${{ github.repository }}/tags?per_page=1" \
+            --jq '.[0].name' \
+            2>/dev/null || echo "")
+
+          if [ -z "${LATEST}" ] || [ "${LATEST}" = "null" ]; then
+            echo "❌ No se encontraron tags en el repositorio."
+            echo "   Creá uno con: git tag v1.0.0 && git push origin v1.0.0"
+            exit 1
+          fi
+
+          echo "🏷️  Último tag : ${LATEST}"
+          echo "🌍 Entorno    : ${{ inputs.environment }}"
+          echo ""
+          echo "tag=${LATEST}" >> "$GITHUB_OUTPUT"
+
+      - name: 📋 Resumen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          # Listar últimos 5 tags para contexto
+          RECENT=$(gh api \
+            "repos/${{ github.repository }}/tags?per_page=5" \
+            --jq '[.[].name]' \
+            2>/dev/null || echo "[]")
+
+          echo "## 🔖 Tag a desplegar" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Entorno** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Últimos tags" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          INDEX=1
+          echo "${RECENT}" | jq -r '.[]' | while read t; do
+            if [ "${t}" = "${TAG}" ]; then
+              echo "| ${INDEX} | \`${t}\` | ✅ **Este** |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| ${INDEX} | \`${t}\` | |" >> $GITHUB_STEP_SUMMARY
+            fi
+            INDEX=$((INDEX + 1))
+          done
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2 · Deploy
+  #   Aplica las protection rules del environment elegido (approvals, timers…)
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy [${{ inputs.environment }}] · ${{ needs.resolve-tag.outputs.tag }}
+    needs: resolve-tag
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: 📋 Información del despliegue
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          ENV="${{ inputs.environment }}"
+          echo ""
+          echo "══════════════════════════════════════════════"
+          echo "  🚀 DESPLIEGUE"
+          echo "══════════════════════════════════════════════"
+          echo ""
+          echo "  🏷️  Tag       : ${TAG}"
+          echo "  🌍 Entorno   : ${ENV}"
+          echo "  📦 Imagen    : ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
+          echo "  👤 Actor     : ${{ github.actor }}"
+          echo "  🕐 Fecha     : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+
+      - name: 🔐 Autenticación Azure (simulado)
+        run: |
+          echo "🔐 Autenticando con Azure..."
+          echo "  → az login --service-principal --tenant <TENANT_ID>"
+          sleep 1
+          echo "  ✅ Autenticado en Azure"
+          echo ""
+          echo "🔐 Login en ACR..."
+          echo "  → az acr login --name ${{ env.ACR_NAME }}"
+          sleep 1
+          echo "  ✅ Sesión iniciada en ACR"
+
+      - name: 📥 Pull imagen desde ACR (simulado)
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
+          echo ""
+          echo "📥 Descargando imagen..."
+          echo "  → docker pull ${IMAGE}"
+          sleep 1
+          echo "  ✅ Imagen lista: ${IMAGE}"
+
+      - name: 🚀 Desplegar (simulado)
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          ENV="${{ inputs.environment }}"
+          IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
+          echo ""
+          echo "🚀 Desplegando en '${ENV}'..."
+          echo ""
+          echo "  → az containerapp update \\"
+          echo "       --name ${{ env.IMAGE_NAME }} \\"
+          echo "       --resource-group rg-${ENV} \\"
+          echo "       --image ${IMAGE} \\"
+          echo "       --set-env-vars ENVIRONMENT=${ENV}"
+          sleep 2
+          echo ""
+          echo "  ✅ Container App actualizado"
+          echo "  → Esperando que las réplicas estén listas..."
+          sleep 2
+          echo "  ✅ Réplicas activas (2/2)"
+
+      - name: 🏥 Health check (simulado)
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          ENV="${{ inputs.environment }}"
+          URL="https://${{ env.IMAGE_NAME }}-${ENV}.azurecontainerapps.io"
+          echo ""
+          echo "🏥 Verificando salud de la aplicación..."
+          echo "  → GET ${URL}/health"
+          sleep 1
+          echo "  ← HTTP 200 OK"
+          echo "       { \"status\": \"healthy\", \"environment\": \"${ENV}\", \"version\": \"${TAG}\" }"
+          echo ""
+          echo "✅ Aplicación saludable en ${URL}"
+
+      - name: 📋 Resumen del despliegue
+        if: always()
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          STATUS="${{ job.status }}"
+          ICON="✅"; [ "${STATUS}" != "success" ] && ICON="❌"
+
+          echo "## ${ICON} Deploy — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Entorno** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Imagen** | \`${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Estado** | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Desplegado por** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Fecha** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
