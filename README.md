@@ -1,68 +1,52 @@
 # flow
 
-A proof-of-concept CI/CD pipeline using **GitHub Actions**, demonstrating a clean separation of concerns across three independent workflows: continuous integration, image release,
-and manual deployment.
+A proof-of-concept CI/CD pipeline using **GitHub Actions**, demonstrating a clean separation of concerns across three independent workflows: continuous integration, image release, and manual deployment.
 
 ---
 
 ## Workflows
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  pipeline.yml          │  release.yml             │  deploy.yml             │
-│  🔨 CI                 │  🚀 Release              │  🔧 Deploy Manual       │
-├────────────────────────┼──────────────────────────┼─────────────────────────┤
-│  push → main           │  tag v*.*.*              │  workflow_dispatch      │
-│  PR → main             │                          │  (manual)               │
-└────────────────────────┴──────────────────────────┴─────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph ci["🔨 pipeline.yml"]
+        A([push / PR → main]) --> B[Compile & Test]
+    end
+
+    subgraph release["🚀 release.yml"]
+        C([tag v*.*.*]) --> D[Build] --> E[Push → ACR]
+    end
+
+    subgraph deploy["🔧 deploy.yml"]
+        F([workflow_dispatch]) --> G[Validate tag] --> H[Deploy] --> I[Health check]
+    end
 ```
 
 ### 🔨 CI (`pipeline.yml`)
-
 Runs on every push to `main` and on pull requests. Compiles the project and executes the test suite.
 
 ### 🚀 Release (`release.yml`)
-
 Triggered automatically when a version tag is pushed. Builds the Docker image and publishes it to Azure Container Registry (ACR).
 
 ### 🔧 Deploy Manual (`deploy.yml`)
-
-Triggered manually from the Actions tab. Select the tag via **"Use workflow from"** and choose the target environment from the dropdown. Supports environment protection rules (
-approvals, wait timers).
+Triggered manually from the Actions tab. Select the tag via **"Use workflow from"** and choose the target environment from the dropdown. Supports environment protection rules (approvals, wait timers).
 
 ---
 
 ## Flow
 
-```
-┌─ develop ──────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│  push / PR → main                                                           │
-│       │                                                                     │
-│       ▼                                                                     │
-│  🔨 CI  →  compile + test                                                   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────── ┘
+```mermaid
+flowchart TD
+    push(["push to main / PR"]) --> ci["🔨 Compile & Test"]
 
-┌─ release ──────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│  git tag v1.2.3 && git push origin v1.2.3                                  │
-│       │                                                                     │
-│       ▼                                                                     │
-│  🐳 build + push → ACR                                                      │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────── ┘
+    tag(["git tag v1.2.3\ngit push origin v1.2.3"]) --> build["🐳 Build Docker image"]
+    build --> acr["📤 Push to ACR"]
 
-┌─ deploy ───────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│  Actions → Deploy Manual → Run workflow                                     │
-│    "Use workflow from" → Tag: v1.2.3                                        │
-│    Target environment  → [development | staging | production]               │
-│       │                                                                     │
-│       ▼                                                                     │
-│  ✅ validate tag  →  🚀 deploy  →  🏥 health check                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────── ┘
+    acr -. image ready .-> manual
+
+    manual(["Actions → Deploy Manual\nUse workflow from: Tag v1.2.3"]) --> env["🌍 Select environment"]
+    env --> validate["✅ Validate tag"]
+    validate --> dep["🚀 Deploy"]
+    dep --> health["🏥 Health check"]
 ```
 
 ---
@@ -91,11 +75,11 @@ The `release.yml` workflow fires automatically, builds the image and pushes it t
 
 Configure environments under **Settings → Environments**.
 
-| Environment   | Recommended protection rules    |
-|---------------|---------------------------------|
-| `development` | None — deploys automatically    |
-| `staging`     | Wait timer: 5 min               |
-| `production`  | Required reviewers: 1+ approver |
+| Environment | Recommended protection rules |
+|-------------|------------------------------|
+| `development` | None — deploys automatically |
+| `staging` | Wait timer: 5 min |
+| `production` | Required reviewers: 1+ approver |
 
 ---
 
@@ -111,12 +95,12 @@ env:
 
 Add the following secrets under **Settings → Secrets and variables → Actions**:
 
-| Secret                  | Description                       |
-|-------------------------|-----------------------------------|
-| `AZURE_CLIENT_ID`       | Service Principal for Azure login |
-| `AZURE_CLIENT_SECRET`   | Service Principal credentials     |
-| `AZURE_TENANT_ID`       | Azure AD tenant                   |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription                |
+| Secret | Description |
+|--------|-------------|
+| `AZURE_CLIENT_ID` | Service Principal for Azure login |
+| `AZURE_CLIENT_SECRET` | Service Principal credentials |
+| `AZURE_TENANT_ID` | Azure AD tenant |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription |
 
 ---
 
