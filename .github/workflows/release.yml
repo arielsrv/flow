@@ -2,7 +2,7 @@ name: 🚀 Release
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER
-#   • tag push v*.*.*  → build + push to ACR
+#   • tag push v*  → build + push to ACR  (e.g. v1, v1.0, v1.2.3, v2.0.0-beta)
 #
 # Once the image is published, deploy it using the "Deploy Manual" workflow
 # by selecting the target environment.
@@ -10,7 +10,7 @@ name: 🚀 Release
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*"
 
 env:
   ACR_NAME: myregistry

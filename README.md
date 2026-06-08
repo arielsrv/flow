@@ -13,7 +13,7 @@ flowchart LR
     end
 
     subgraph release["🚀 release.yml"]
-        C([tag v*.*.*]) --> D[Build] --> E[Push → ACR]
+        C([tag v*]) --> D[Build] --> E[Push → ACR]
     end
 
     subgraph deploy["🔧 deploy.yml"]
