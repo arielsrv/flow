@@ -2,15 +2,24 @@ name: 🚀 Release
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER
-#   • tag push v*.*.*  → build + push to ACR
+#   • workflow_dispatch from any branch
+#   • "Use workflow from" → select a branch (e.g. main)
+#   • Enter the tag name in the input (e.g. v1.2.3, v2.0.0-beta)
 #
-# Once the image is published, deploy it using the "Deploy Manual" workflow
-# by selecting the target environment.
+# FLOW
+#   1. Build artifact
+#   2. Push image to ACR  ← uses the tag name from the input
+#   3. Only if all of the above succeeded → create and push the git tag
+#
+# The tag is the OUTPUT of a successful release, never the input.
+# If anything fails, no tag is created and nothing is left behind.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "🏷️ Tag name (e.g. v1.0, v1.2.3, v2.0.0-beta)"
+        required: true
 
 env:
   ACR_NAME: myregistry
@@ -18,6 +27,9 @@ env:
 
 jobs:
 
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1 · Build & Push → ACR
+  # ───────────────────────────────────────────────────────────────────────────
   build-and-push:
     name: 🐳 Build & Push → ACR
     runs-on: ubuntu-latest
@@ -28,17 +40,19 @@ jobs:
 
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: 🔖 Extract tag metadata
+      - name: 🔖 Resolve image metadata
         id: meta
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ inputs.tag }}"
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}"
           echo "tag=${TAG}"     >> "$GITHUB_OUTPUT"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo ""
-          echo "📌 Detected tag  : ${TAG}"
+          echo "🏷️  Tag          : ${TAG}"
+          echo "🌿 Branch        : ${{ github.ref_name }}"
+          echo "🔑 Commit        : ${{ github.sha }}"
           echo "🖼️  Target image  : ${IMAGE}:${TAG}"
 
       - name: 📦 Production build (simulated)
@@ -96,18 +110,42 @@ jobs:
           echo ""
           echo "✅ Image published successfully"
 
-      - name: 📋 Build summary
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2 · Create git tag — only runs if build-and-push succeeded
+  # ───────────────────────────────────────────────────────────────────────────
+  create-tag:
+    name: 🏷️ Create tag — ${{ inputs.tag }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to push tags
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Create and push tag
         run: |
-          IMAGE="${{ steps.meta.outputs.image }}"
-          TAG="${{ steps.meta.outputs.tag }}"
-          echo "## 🐳 Image published to ACR" >> $GITHUB_STEP_SUMMARY
+          TAG="${{ inputs.tag }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          echo ""
+          echo "✅ Tag '${TAG}' created → $(git rev-parse HEAD)"
+
+      - name: 📋 Release summary
+        run: |
+          IMAGE="${{ needs.build-and-push.outputs.image }}"
+          TAG="${{ needs.build-and-push.outputs.tag }}"
+          echo "## 🚀 Release \`${TAG}\` published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Registry** | \`${{ env.ACR_NAME }}.azurecr.io\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Image** | \`${IMAGE}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${IMAGE}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Published by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> ✅ Image ready. To deploy, run the **Deploy Manual** workflow and select the target environment." >> $GITHUB_STEP_SUMMARY
+          echo "> ✅ Image ready. To deploy, run the **Deploy Manual** workflow and select tag \`${TAG}\`." >> $GITHUB_STEP_SUMMARY
