@@ -2,14 +2,19 @@
 
 ## Architecture: 3 independent workflows
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  pipeline.yml          │  release.yml             │  deploy.yml             │
-│  🔨 CI                 │  🚀 Release              │  🔧 Deploy Manual       │
-├────────────────────────┼──────────────────────────┼─────────────────────────┤
-│  push → main           │  tag v*.*.*              │  workflow_dispatch      │
-│  PR → main             │                          │  (manual)               │
-└────────────────────────┴──────────────────────────┴─────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph ci["🔨 pipeline.yml"]
+        A([push / PR → main]) --> B[Compile & Test]
+    end
+
+    subgraph release["🚀 release.yml"]
+        C([tag v*.*.*]) --> D[Build] --> E[Push → ACR]
+    end
+
+    subgraph deploy["🔧 deploy.yml"]
+        F([workflow_dispatch]) --> G[Validate tag] --> H[Deploy] --> I[Health check]
+    end
 ```
 
 ---
@@ -18,13 +23,12 @@
 
 **Trigger:** push to `main` or PR against `main`
 
-```
-push / PR
-  └─▶ 🔨 Compile & Test
+```mermaid
+flowchart LR
+    A([push to main / PR]) --> B[Compile] --> C[Test] --> D[Step Summary]
 ```
 
 **Steps:**
-
 1. Checkout
 2. Context info (PR vs direct push)
 3. Simulated build
@@ -37,18 +41,17 @@ push / PR
 
 **Trigger:** tag push matching `v[0-9]+.[0-9]+.[0-9]+`
 
-```
-git tag v1.2.3
-git push origin v1.2.3
-       │
-       ▼
-┌─────────────────┐
-│ 🐳 build-push   │  build image + push to ACR
-└─────────────────┘
+```mermaid
+flowchart LR
+    A(["git tag v1.2.3\ngit push origin v1.2.3"]) --> B[Extract tag metadata]
+    B --> C[Production build]
+    C --> D[ACR login]
+    D --> E[Docker build]
+    E --> F[Docker push → ACR]
+    F --> G[Step Summary]
 ```
 
 **Steps:**
-
 1. Extract tag metadata
 2. Simulated production build
 3. Simulated ACR login
@@ -72,15 +75,23 @@ git push origin v1.2.3
 
 **Trigger:** `workflow_dispatch` (Actions → Run workflow)
 
-**Use it for:**
+```mermaid
+flowchart TD
+    A(["Actions → Deploy Manual\nRun workflow"]) --> B["Use workflow from: Tag v1.2.3"]
+    B --> C["Select environment"]
+    C --> D["✅ Validate tag\n(must be refs/tags/*)"]
+    D --> E["🚀 Deploy\n(environment gates apply)"]
+    E --> F["🏥 Health check"]
+    F --> G["📋 Step Summary"]
+```
 
+**Use it for:**
 - Deploying a published tag to a specific environment
 - Rolling back to a previous version
 - Emergency deployments
 - Targeted environment testing
 
 **How to use:**
-
 1. Actions → **Deploy Manual** → **Run workflow**
 2. **"Use workflow from"** → **Tag** → select the tag (e.g. `v1.2.3`)
 3. Select the **target environment**
@@ -95,7 +106,6 @@ from the "Use workflow from" selection. No text input needed.
 | `environment` | **environment** | Dropdown with the repo's configured environments |
 
 **Jobs:**
-
 1. `validate-tag` → verifies the workflow was triggered from a tag (not a branch)
 2. `deploy` → deploys to the selected environment, respecting its protection rules
 
@@ -109,20 +119,20 @@ For environment gates to work, configure them at:
 
 ### Recommended environments
 
-| Environment   | Protection rules                |
-|---------------|---------------------------------|
-| `development` | None (automatic deploy)         |
-| `staging`     | Wait timer: 5 min               |
-| `production`  | Required reviewers: 1+ approver |
+| Environment | Protection rules |
+|-------------|-----------------|
+| `development` | None (automatic deploy) |
+| `staging` | Wait timer: 5 min |
+| `production` | Required reviewers: 1+ approver |
 
 ### How to add protection rules
 
 1. Go to **Settings → Environments**
 2. Select the environment
 3. Under **Deployment protection rules**:
-    - ✅ **Required reviewers** → add users/teams as approvers
-    - ✅ **Wait timer** → minutes to wait before executing
-    - ✅ **Restrict deployments to protected branches** → only from `main`/tags
+   - ✅ **Required reviewers** → add users/teams as approvers
+   - ✅ **Wait timer** → minutes to wait before executing
+   - ✅ **Restrict deployments to protected branches** → only from `main`/tags
 
 ---
 
@@ -140,9 +150,9 @@ env:
 
 Add under **Settings → Secrets and variables → Actions**:
 
-| Secret                  | Description                       |
-|-------------------------|-----------------------------------|
-| `AZURE_CLIENT_ID`       | Service Principal for Azure login |
-| `AZURE_CLIENT_SECRET`   | Service Principal credentials     |
-| `AZURE_TENANT_ID`       | Azure AD tenant                   |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription                |
+| Secret | Description |
+|--------|-------------|
+| `AZURE_CLIENT_ID` | Service Principal for Azure login |
+| `AZURE_CLIENT_SECRET` | Service Principal credentials |
+| `AZURE_TENANT_ID` | Azure AD tenant |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription |
