@@ -24,16 +24,16 @@
   ─────────────────── DEPLOY MANUAL (workflow_dispatch) ──────────────
 
   Inputs requeridos:
-    • tag         → ej: v1.2.3
+    • tag         → ej: v1.2.3  (podés ver los disponibles en el primer job)
     • environment → elegido del selector (auto-descubre los del repo)
 
-  ┌──────────────────────┐     ┌──────────────────────────────────────┐
-  │ 🔍 Discover Envs     │────▶│ 🚀 Deploy → [environment]            │
-  │ (GitHub API)         │     │  ├─ 🔐 Autenticación Azure           │
-  └──────────────────────┘     │  ├─ 📥 Pull imagen ACR               │
-                                │  ├─ 🚀 Deploy Container App         │
-                                │  └─ 🏥 Health check                 │
-                                └──────────────────────────────────────┘
+  ┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────────────────────┐
+  │ 🏷️ Discover Tags     │     │ 🔍 Discover Envs     │────▶│ 🚀 Deploy → [environment]            │
+  │ (últimos 10, GitHub  │     │ (GitHub API)         │     │  ├─ 🔐 Autenticación Azure           │
+  │  API, valida input)  │     └──────────────────────┘     │  ├─ 📥 Pull imagen ACR               │
+  └──────────────────────┘                                   │  ├─ 🚀 Deploy Container App         │
+                                                             │  └─ 🏥 Health check                 │
+                                                             └──────────────────────────────────────┘
 ```
 
 ---
@@ -87,15 +87,21 @@ git push origin v1.2.3
 **Inputs:**
 | Input | Tipo | Descripción |
 |-------|------|-------------|
-| `tag` | string | Tag de la imagen a desplegar (ej: `v1.2.3`) |
+| `tag` | string | Tag de la imagen a desplegar (ej: `v1.2.3`) — los últimos 10 se listan en el primer job |
 | `environment` | **environment** | Selector que muestra los environments del repo |
 
 > ℹ️ El input `type: environment` hace que GitHub muestre automáticamente
 > un dropdown con todos los environments configurados en **Settings → Environments**.
 
+> ℹ️ El input `tag` es texto libre. Como GitHub Actions **no soporta dropdowns dinámicos**
+> en `workflow_dispatch`, el job `discover-tags` consulta la API al inicio y muestra los
+> últimos 10 tags en el **Step Summary**, resaltando el que ingresaste. También valida
+> que exista y avisa si hay un posible error tipográfico.
+
 **Pasos:**
-1. `discover-environments` → consulta la GitHub API y lista los entornos disponibles
-2. `deploy` → valida el entorno, despliega y hace health check
+1. `discover-tags` → consulta la GitHub API, lista los últimos 10 tags, valida que el tag ingresado exista y lo resalta en el Step Summary
+2. `discover-environments` → consulta la GitHub API y lista los entornos disponibles
+3. `deploy` → valida el entorno, despliega y hace health check
    - Si el environment tiene **protection rules** (required reviewers, wait timer), GitHub
      pausará el job hasta que alguien apruebe antes de continuar.
 

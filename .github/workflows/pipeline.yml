@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "🏷️  Tag de imagen a desplegar (ej: v1.2.3)"
+        description: "🏷️  Tag a desplegar (ej: v1.2.3) — los últimos 10 se listan en el primer job"
         required: true
         type: string
       environment:
@@ -216,7 +216,99 @@ jobs:
           echo "> ℹ️ Para desplegar esta imagen, ejecutá el workflow manualmente con el tag \`${TAG}\`" >> $GITHUB_STEP_SUMMARY
 
   # ───────────────────────────────────────────────────────────────────────────
-  # JOB 3a · Descubrir entornos disponibles
+  # JOB 3a · Descubrir tags disponibles
+  #   Corre en: workflow_dispatch — lista los últimos 10 tags del repo vía API
+  #   y valida que el tag ingresado exista
+  # ───────────────────────────────────────────────────────────────────────────
+  discover-tags:
+    name: 🏷️ Últimos tags disponibles
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    outputs:
+      list: ${{ steps.list.outputs.tags }}
+
+    steps:
+      - name: 📡 Consultar GitHub API — Tags
+        id: list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo ""
+          echo "📡 Consultando últimos tags del repositorio..."
+          echo "   Repo: ${{ github.repository }}"
+          echo ""
+
+          TAGS=$(gh api \
+            "repos/${{ github.repository }}/tags?per_page=10" \
+            --jq '[.[].name]' \
+            2>/dev/null || echo "[]")
+
+          COUNT=$(echo "${TAGS}" | jq 'length')
+          INPUT_TAG="${{ inputs.tag }}"
+
+          if [ "${COUNT}" -eq 0 ]; then
+            echo "⚠️  No se encontraron tags en el repositorio."
+            echo "   Creá uno con: git tag v1.0.0 && git push origin v1.0.0"
+          else
+            echo "🏷️  Últimos ${COUNT} tags disponibles:"
+            echo "${TAGS}" | jq -r '.[]' | while read tag; do
+              if [ "${tag}" = "${INPUT_TAG}" ]; then
+                echo "   → ${tag}  ✅ (seleccionado)"
+              else
+                echo "   → ${tag}"
+              fi
+            done
+          fi
+
+          echo ""
+          echo "🎯 Tag solicitado : ${INPUT_TAG}"
+
+          # Validar que el tag ingresado exista
+          FOUND=$(echo "${TAGS}" | jq -e --arg t "${INPUT_TAG}" 'index($t) != null' 2>/dev/null || echo "false")
+          if [ "${FOUND}" != "true" ]; then
+            echo ""
+            echo "⚠️  ADVERTENCIA: '${INPUT_TAG}' no está en los últimos 10 tags."
+            echo "   Puede ser un tag más antiguo o un error tipográfico."
+            echo "   El despliegue continuará de todas formas."
+          else
+            echo "✅ Tag validado correctamente"
+          fi
+
+          echo ""
+          echo "tags=$(echo "${TAGS}" | jq -c '.')" >> "$GITHUB_OUTPUT"
+
+      - name: 📋 Resumen de tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAGS=$(gh api \
+            "repos/${{ github.repository }}/tags?per_page=10" \
+            --jq '[.[].name]' \
+            2>/dev/null || echo "[]")
+
+          INPUT_TAG="${{ inputs.tag }}"
+
+          echo "## 🏷️ Tags disponibles (últimos 10)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| # | Tag | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|-----|--|" >> $GITHUB_STEP_SUMMARY
+
+          INDEX=1
+          echo "${TAGS}" | jq -r '.[]' | while read tag; do
+            if [ "${tag}" = "${INPUT_TAG}" ]; then
+              echo "| ${INDEX} | \`${tag}\` | ✅ **Seleccionado** |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| ${INDEX} | \`${tag}\` | |" >> $GITHUB_STEP_SUMMARY
+            fi
+            INDEX=$((INDEX + 1))
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Tag ingresado:** \`${INPUT_TAG}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 3b · Descubrir entornos disponibles
   #   Corre en: workflow_dispatch — lista los environments del repo vía API
   # ───────────────────────────────────────────────────────────────────────────
   discover-environments:
@@ -259,7 +351,7 @@ jobs:
           echo "environments=${NAMES}" >> "$GITHUB_OUTPUT"
 
   # ───────────────────────────────────────────────────────────────────────────
-  # JOB 3b · Deploy manual
+  # JOB 3c · Deploy manual
   #   Corre en: workflow_dispatch
   #   • Requiere aprobación si el environment tiene protection rules en GitHub
   #   • El input `environment` muestra automáticamente los envs del repo
@@ -267,7 +359,7 @@ jobs:
   deploy:
     name: 🚀 Deploy [${{ inputs.environment }}] · ${{ inputs.tag }}
     if: github.event_name == 'workflow_dispatch'
-    needs: discover-environments
+    needs: [discover-tags, discover-environments]
     runs-on: ubuntu-latest
 
     # Aplica las protection rules del environment elegido (approvals, wait timers, etc.)
