@@ -13,11 +13,11 @@ flowchart LR
     end
 
     subgraph release["🚀 release.yml"]
-        C([tag v*.*.*]) --> D[Build] --> E[Push → ACR]
+        C([workflow_dispatch\ntag input]) --> D[Build] --> E[Push → ACR] --> F[Create tag]
     end
 
     subgraph deploy["🔧 deploy.yml"]
-        F([workflow_dispatch]) --> G[Validate tag] --> H[Deploy] --> I[Health check]
+        G([workflow_dispatch\nUse workflow from: tag]) --> H[Validate tag] --> I[Deploy] --> J[Health check]
     end
 ```
 
@@ -25,7 +25,7 @@ flowchart LR
 Runs on every push to `main` and on pull requests. Compiles the project and executes the test suite.
 
 ### 🚀 Release (`release.yml`)
-Triggered automatically when a version tag is pushed. Builds the Docker image and publishes it to Azure Container Registry (ACR).
+Triggered manually from the Actions tab. Enter the tag name (e.g. `v1.2.3`), select any branch as the source, and the workflow builds the Docker image, pushes it to ACR, and **only if everything succeeds** creates the git tag. If the build fails, no tag is left behind.
 
 ### 🔧 Deploy Manual (`deploy.yml`)
 Triggered manually from the Actions tab. Select the tag via **"Use workflow from"** and choose the target environment from the dropdown. Supports environment protection rules (approvals, wait timers).
@@ -38,10 +38,13 @@ Triggered manually from the Actions tab. Select the tag via **"Use workflow from
 flowchart TD
     push(["push to main / PR"]) --> ci["🔨 Compile & Test"]
 
-    tag(["git tag v1.2.3\ngit push origin v1.2.3"]) --> build["🐳 Build Docker image"]
-    build --> acr["📤 Push to ACR"]
+    dispatch(["Actions → Release\nBranch: main\nTag input: v1.2.3"]) --> build["🐳 Build Docker image"]
+    build --> acr["📤 Push to ACR\nmyregistry.azurecr.io/my-app:v1.2.3"]
+    acr --> createtag["🏷️ Create git tag v1.2.3"]
 
-    acr -. image ready .-> manual
+    build -- failure --> stop(["❌ Stop — no tag created"])
+
+    createtag -. image ready .-> manual
 
     manual(["Actions → Deploy Manual\nUse workflow from: Tag v1.2.3"]) --> env["🌍 Select environment"]
     env --> validate["✅ Validate tag"]
@@ -55,17 +58,17 @@ flowchart TD
 
 ### 1. Create a release
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+1. Go to **Actions → Release → Run workflow**
+2. **"Use workflow from"** → select a branch (e.g. `main`)
+3. Enter the **tag name** in the input (e.g. `v1.2.3`)
+4. Click **Run workflow**
 
-The `release.yml` workflow fires automatically, builds the image and pushes it to ACR.
+The `release.yml` workflow builds the image, pushes it to ACR, and only then creates the git tag. If anything fails, no tag is left behind.
 
 ### 2. Deploy to an environment
 
 1. Go to **Actions → Deploy Manual → Run workflow**
-2. Under **"Use workflow from"**, select **Tag** → pick the tag (e.g. `v1.0.0`)
+2. Under **"Use workflow from"**, select **Tag** → pick the tag (e.g. `v1.2.3`)
 3. Select the **target environment**
 4. Click **Run workflow**
 
