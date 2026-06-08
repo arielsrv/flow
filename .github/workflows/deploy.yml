@@ -1,23 +1,23 @@
-name: 🔧 Deploy
+name: 🔧 Deploy Manual
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER
-#   • workflow_dispatch
+#   • workflow_dispatch → select only the target environment
 #
-# CÓMO USARLO:
+# HOW TO USE:
 #   1. Actions → Deploy Manual → Run workflow
-#   2. "Use workflow from" → elegí el TAG que querés desplegar  ← aquí va el tag
-#   3. Seleccioná el entorno destino
+#   2. "Use workflow from" → pick the TAG you want to deploy  ← tag goes here
+#   3. Select the target environment
 #   4. Run workflow
 #
-# El tag se toma de "Use workflow from" (github.ref_name), no hace falta
-# ningún input adicional.
+# The tag is read from "Use workflow from" (github.ref_name),
+# no additional input needed.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "🌍 Entorno de despliegue"
+        description: "🌍 Target environment"
         required: true
         type: environment
 
@@ -28,57 +28,57 @@ env:
 jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
-  # JOB 1 · Validar que se disparó desde un tag
+  # JOB 1 · Validate that the workflow was triggered from a tag
   # ───────────────────────────────────────────────────────────────────────────
   validate-tag:
-    name: 🔖 Validar tag — ${{ github.ref_name }}
+    name: 🔖 Validate tag — ${{ github.ref_name }}
     runs-on: ubuntu-latest
 
     outputs:
       tag: ${{ steps.check.outputs.tag }}
 
     steps:
-      - name: ✅ Verificar que el ref es un tag válido
+      - name: ✅ Verify ref is a valid tag
         id: check
         run: |
           REF="${{ github.ref }}"
           TAG="${{ github.ref_name }}"
 
           echo ""
-          echo "📌 Ref    : ${REF}"
-          echo "🏷️  Tag    : ${TAG}"
-          echo "🌍 Entorno: ${{ inputs.environment }}"
+          echo "📌 Ref         : ${REF}"
+          echo "🏷️  Tag         : ${TAG}"
+          echo "🌍 Environment : ${{ inputs.environment }}"
           echo ""
 
-          # Verificar que se lanzó desde un tag (refs/tags/...) y no desde una rama
+          # Ensure the workflow was triggered from a tag, not a branch
           if [[ "${REF}" != refs/tags/* ]]; then
-            echo "❌ ERROR: Este workflow debe ejecutarse desde un TAG."
+            echo "❌ ERROR: This workflow must be run from a TAG."
             echo ""
-            echo "   Pasos correctos:"
+            echo "   Correct steps:"
             echo "   1. Actions → Deploy Manual → Run workflow"
-            echo "   2. 'Use workflow from' → Tag → seleccioná el tag (ej: v1.2.3)"
-            echo "   3. Elegí el entorno y dale Run"
+            echo "   2. 'Use workflow from' → Tag → select the tag (e.g. v1.2.3)"
+            echo "   3. Select the environment and click Run"
             echo ""
-            echo "   Ref actual: ${REF} (es una rama, no un tag)"
+            echo "   Current ref: ${REF} (this is a branch, not a tag)"
             exit 1
           fi
 
-          echo "✅ Tag validado : ${TAG}"
+          echo "✅ Tag validated : ${TAG}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: 📋 Resumen
+      - name: 📋 Summary
         run: |
-          echo "## 🔖 Deploy desde tag \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔖 Deploy from tag \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Entorno** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Disparado por** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
   # ───────────────────────────────────────────────────────────────────────────
   # JOB 2 · Deploy
-  #   Aplica las protection rules del environment elegido (approvals, timers…)
+  #   Applies the protection rules of the selected environment (approvals…)
   # ───────────────────────────────────────────────────────────────────────────
   deploy:
     name: 🚀 Deploy [${{ inputs.environment }}] · ${{ needs.validate-tag.outputs.tag }}
@@ -87,51 +87,51 @@ jobs:
     environment: ${{ inputs.environment }}
 
     steps:
-      - name: 📋 Información del despliegue
+      - name: 📋 Deployment info
         run: |
           TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           echo ""
           echo "══════════════════════════════════════════════"
-          echo "  🚀 DESPLIEGUE"
+          echo "  🚀 DEPLOYMENT"
           echo "══════════════════════════════════════════════"
           echo ""
-          echo "  🏷️  Tag       : ${TAG}"
-          echo "  🌍 Entorno   : ${ENV}"
-          echo "  📦 Imagen    : ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
-          echo "  👤 Actor     : ${{ github.actor }}"
-          echo "  🕐 Fecha     : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "  🏷️  Tag         : ${TAG}"
+          echo "  🌍 Environment  : ${ENV}"
+          echo "  📦 Image        : ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
+          echo "  👤 Actor        : ${{ github.actor }}"
+          echo "  🕐 Date         : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo ""
 
-      - name: 🔐 Autenticación Azure (simulado)
+      - name: 🔐 Azure authentication (simulated)
         run: |
-          echo "🔐 Autenticando con Azure..."
+          echo "🔐 Authenticating to Azure..."
           echo "  → az login --service-principal --tenant <TENANT_ID>"
           sleep 1
-          echo "  ✅ Autenticado en Azure"
+          echo "  ✅ Authenticated to Azure"
           echo ""
-          echo "🔐 Login en ACR..."
+          echo "🔐 ACR login..."
           echo "  → az acr login --name ${{ env.ACR_NAME }}"
           sleep 1
-          echo "  ✅ Sesión iniciada en ACR"
+          echo "  ✅ Logged in to ACR"
 
-      - name: 📥 Pull imagen desde ACR (simulado)
+      - name: 📥 Pull image from ACR (simulated)
         run: |
           TAG="${{ needs.validate-tag.outputs.tag }}"
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
           echo ""
-          echo "📥 Descargando imagen..."
+          echo "📥 Pulling image..."
           echo "  → docker pull ${IMAGE}"
           sleep 1
-          echo "  ✅ Imagen lista: ${IMAGE}"
+          echo "  ✅ Image ready: ${IMAGE}"
 
-      - name: 🚀 Desplegar (simulado)
+      - name: 🚀 Deploy (simulated)
         run: |
           TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
           echo ""
-          echo "🚀 Desplegando en '${ENV}'..."
+          echo "🚀 Deploying to '${ENV}'..."
           echo ""
           echo "  → az containerapp update \\"
           echo "       --name ${{ env.IMAGE_NAME }} \\"
@@ -140,26 +140,26 @@ jobs:
           echo "       --set-env-vars ENVIRONMENT=${ENV}"
           sleep 2
           echo ""
-          echo "  ✅ Container App actualizado"
-          echo "  → Esperando que las réplicas estén listas..."
+          echo "  ✅ Container App updated"
+          echo "  → Waiting for replicas to be ready..."
           sleep 2
-          echo "  ✅ Réplicas activas (2/2)"
+          echo "  ✅ Replicas active (2/2)"
 
-      - name: 🏥 Health check (simulado)
+      - name: 🏥 Health check (simulated)
         run: |
           TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           URL="https://${{ env.IMAGE_NAME }}-${ENV}.azurecontainerapps.io"
           echo ""
-          echo "🏥 Verificando salud de la aplicación..."
+          echo "🏥 Checking application health..."
           echo "  → GET ${URL}/health"
           sleep 1
           echo "  ← HTTP 200 OK"
           echo "       { \"status\": \"healthy\", \"environment\": \"${ENV}\", \"version\": \"${TAG}\" }"
           echo ""
-          echo "✅ Aplicación saludable en ${URL}"
+          echo "✅ Application healthy at ${URL}"
 
-      - name: 📋 Resumen del despliegue
+      - name: 📋 Deployment summary
         if: always()
         run: |
           TAG="${{ needs.validate-tag.outputs.tag }}"
@@ -168,11 +168,11 @@ jobs:
 
           echo "## ${ICON} Deploy — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Entorno** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Imagen** | \`${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Estado** | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Desplegado por** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Fecha** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Date** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
