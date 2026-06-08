@@ -2,8 +2,16 @@ name: 🔧 Deploy Manual
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER
-#   • workflow_dispatch → seleccionás solo el entorno
-#     El tag se detecta automáticamente del último release publicado
+#   • workflow_dispatch
+#
+# CÓMO USARLO:
+#   1. Actions → Deploy Manual → Run workflow
+#   2. "Use workflow from" → elegí el TAG que querés desplegar  ← aquí va el tag
+#   3. Seleccioná el entorno destino
+#   4. Run workflow
+#
+# El tag se toma de "Use workflow from" (github.ref_name), no hace falta
+# ningún input adicional.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   workflow_dispatch:
@@ -11,7 +19,7 @@ on:
       environment:
         description: "🌍 Entorno de despliegue"
         required: true
-        type: environment   # ← GitHub lista automáticamente los environments del repo
+        type: environment
 
 env:
   ACR_NAME: myregistry
@@ -20,88 +28,68 @@ env:
 jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
-  # JOB 1 · Resolver el tag a desplegar
-  #   Obtiene automáticamente el último tag publicado en el repositorio
+  # JOB 1 · Validar que se disparó desde un tag
   # ───────────────────────────────────────────────────────────────────────────
-  resolve-tag:
-    name: 🔖 Resolver último tag
+  validate-tag:
+    name: 🔖 Validar tag — ${{ github.ref_name }}
     runs-on: ubuntu-latest
 
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      tag: ${{ steps.check.outputs.tag }}
 
     steps:
-      - name: 📡 Obtener último tag via GitHub API
-        id: tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: ✅ Verificar que el ref es un tag válido
+        id: check
         run: |
+          REF="${{ github.ref }}"
+          TAG="${{ github.ref_name }}"
+
           echo ""
-          echo "📡 Consultando último tag del repositorio..."
-          echo "   Repo: ${{ github.repository }}"
+          echo "📌 Ref    : ${REF}"
+          echo "🏷️  Tag    : ${TAG}"
+          echo "🌍 Entorno: ${{ inputs.environment }}"
           echo ""
 
-          LATEST=$(gh api \
-            "repos/${{ github.repository }}/tags?per_page=1" \
-            --jq '.[0].name' \
-            2>/dev/null || echo "")
-
-          if [ -z "${LATEST}" ] || [ "${LATEST}" = "null" ]; then
-            echo "❌ No se encontraron tags en el repositorio."
-            echo "   Creá uno con: git tag v1.0.0 && git push origin v1.0.0"
+          # Verificar que se lanzó desde un tag (refs/tags/...) y no desde una rama
+          if [[ "${REF}" != refs/tags/* ]]; then
+            echo "❌ ERROR: Este workflow debe ejecutarse desde un TAG."
+            echo ""
+            echo "   Pasos correctos:"
+            echo "   1. Actions → Deploy Manual → Run workflow"
+            echo "   2. 'Use workflow from' → Tag → seleccioná el tag (ej: v1.2.3)"
+            echo "   3. Elegí el entorno y dale Run"
+            echo ""
+            echo "   Ref actual: ${REF} (es una rama, no un tag)"
             exit 1
           fi
 
-          echo "🏷️  Último tag : ${LATEST}"
-          echo "🌍 Entorno    : ${{ inputs.environment }}"
-          echo ""
-          echo "tag=${LATEST}" >> "$GITHUB_OUTPUT"
+          echo "✅ Tag validado : ${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: 📋 Resumen
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-
-          # Listar últimos 5 tags para contexto
-          RECENT=$(gh api \
-            "repos/${{ github.repository }}/tags?per_page=5" \
-            --jq '[.[].name]' \
-            2>/dev/null || echo "[]")
-
-          echo "## 🔖 Tag a desplegar" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔖 Deploy desde tag \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Tag** | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Entorno** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Últimos tags" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          INDEX=1
-          echo "${RECENT}" | jq -r '.[]' | while read t; do
-            if [ "${t}" = "${TAG}" ]; then
-              echo "| ${INDEX} | \`${t}\` | ✅ **Este** |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| ${INDEX} | \`${t}\` | |" >> $GITHUB_STEP_SUMMARY
-            fi
-            INDEX=$((INDEX + 1))
-          done
+          echo "| **Disparado por** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
   # ───────────────────────────────────────────────────────────────────────────
   # JOB 2 · Deploy
   #   Aplica las protection rules del environment elegido (approvals, timers…)
   # ───────────────────────────────────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy [${{ inputs.environment }}] · ${{ needs.resolve-tag.outputs.tag }}
-    needs: resolve-tag
+    name: 🚀 Deploy [${{ inputs.environment }}] · ${{ needs.validate-tag.outputs.tag }}
+    needs: validate-tag
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
     steps:
       - name: 📋 Información del despliegue
         run: |
-          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           echo ""
           echo "══════════════════════════════════════════════"
@@ -129,7 +117,7 @@ jobs:
 
       - name: 📥 Pull imagen desde ACR (simulado)
         run: |
-          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          TAG="${{ needs.validate-tag.outputs.tag }}"
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
           echo ""
           echo "📥 Descargando imagen..."
@@ -139,7 +127,7 @@ jobs:
 
       - name: 🚀 Desplegar (simulado)
         run: |
-          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${TAG}"
           echo ""
@@ -159,7 +147,7 @@ jobs:
 
       - name: 🏥 Health check (simulado)
         run: |
-          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          TAG="${{ needs.validate-tag.outputs.tag }}"
           ENV="${{ inputs.environment }}"
           URL="https://${{ env.IMAGE_NAME }}-${ENV}.azurecontainerapps.io"
           echo ""
@@ -174,7 +162,7 @@ jobs:
       - name: 📋 Resumen del despliegue
         if: always()
         run: |
-          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          TAG="${{ needs.validate-tag.outputs.tag }}"
           STATUS="${{ job.status }}"
           ICON="✅"; [ "${STATUS}" != "success" ] && ICON="❌"
 
