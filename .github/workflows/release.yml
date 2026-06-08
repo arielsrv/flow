@@ -29,10 +29,37 @@ env:
 jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
-  # JOB 1 · Build & Push → ACR
+  # JOB 1 · Validate that the workflow was triggered from a branch, not a tag
+  # ───────────────────────────────────────────────────────────────────────────
+  validate-ref:
+    name: 🌿 Validate branch — ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✅ Verify ref is a branch
+        run: |
+          REF="${{ github.ref }}"
+
+          if [[ "${REF}" == refs/tags/* ]]; then
+            echo "❌ ERROR: This workflow must be run from a BRANCH, not a tag."
+            echo ""
+            echo "   Correct steps:"
+            echo "   1. Actions → Release → Run workflow"
+            echo "   2. 'Use workflow from' → Branch → select the branch (e.g. main)"
+            echo "   3. Enter the tag name in the input field and click Run"
+            echo ""
+            echo "   Current ref: ${REF}"
+            exit 1
+          fi
+
+          echo "✅ Ref is a branch: ${{ github.ref_name }}"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2 · Build & Push → ACR
   # ───────────────────────────────────────────────────────────────────────────
   build-and-push:
     name: 🐳 Build & Push → ACR
+    needs: validate-ref
     runs-on: ubuntu-latest
 
     outputs:

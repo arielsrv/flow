@@ -52,7 +52,7 @@ jobs:
 
           # Ensure the workflow was triggered from a tag, not a branch
           if [[ "${REF}" != refs/tags/* ]]; then
-            echo "❌ ERROR: This workflow must be run from a TAG."
+            echo "❌ ERROR: This workflow must be run from a TAG, not a branch."
             echo ""
             echo "   Correct steps:"
             echo "   1. Actions → Deploy Manual → Run workflow"
