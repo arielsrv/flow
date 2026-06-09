@@ -21,6 +21,16 @@ on:
         description: "🌍 Target environment"
         required: true
         type: environment
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to deploy (e.g. v1.2.3)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment: development | staging | production"
+        required: true
+        type: string
 
 env:
   ACR_NAME: myregistry
@@ -42,6 +52,15 @@ jobs:
       - name: ✅ Verify ref is a valid tag
         id: check
         run: |
+          # ── workflow_call path: tag comes from input ──────────────────────
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+            echo "✅ Tag from input (workflow_call): ${TAG}"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ── workflow_dispatch path: tag comes from "Use workflow from" ────
           REF="${{ github.ref }}"
           TAG="${{ github.ref_name }}"
 
@@ -51,7 +70,6 @@ jobs:
           echo "🌍 Environment : ${{ inputs.environment }}"
           echo ""
 
-          # Ensure the workflow was triggered from a tag, not a branch
           if [[ "${REF}" != refs/tags/* ]]; then
             echo "❌ ERROR: This workflow must be run from a TAG, not a branch."
             echo ""
