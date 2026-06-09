@@ -2,14 +2,22 @@ name: 🔨 CI
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGERS
-#   • push to main      → compile + test
-#   • PR against main   → compile + test
+#   • push to any branch  → compile + test
+#   • PR (any target)     → compile + test
+#
+# DEDUP
+#   Both events share the same commit SHA when a branch with an open PR is
+#   pushed. The concurrency group collapses them into one run — the second
+#   event cancels the first if it is still queued or running.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JOBS
