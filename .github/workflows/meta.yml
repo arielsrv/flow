@@ -1,0 +1,63 @@
+name: 🔄 Pipeline Orchestrator
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INTERNAL — este workflow es el punto de entrada único para cualquier repo.
+#
+# Recibe: runtime + action + tag + environment
+# Delega: al sub-workflow correcto según el action
+#
+# Esto es el equivalente al "extends" / "include" de GitLab CI.
+# El repo caller NO necesita saber cuántos workflows existen aquí adentro.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_call:
+    inputs:
+      runtime:
+        description: "golang | python | dotnet | nodejs"
+        required: true
+        type: string
+      action:
+        description: "ci | release | deploy  (default: ci)"
+        required: false
+        type: string
+        default: ci
+      tag:
+        description: "Tag a publicar/desplegar (e.g. v1.2.3)"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "Entorno de deploy (development | staging | production)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+
+  # ── CI: compile + test ────────────────────────────────────────────────────
+  ci:
+    name: 🔨 CI (${{ inputs.runtime }})
+    if: inputs.action == 'ci'
+    uses: ./.github/workflows/pipeline.yml
+    with:
+      runtime: ${{ inputs.runtime }}
+
+  # ── Release: build → push ACR → crear git tag ─────────────────────────────
+  release:
+    name: 🚀 Release (${{ inputs.runtime }})
+    if: inputs.action == 'release'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ inputs.tag }}
+      runtime: ${{ inputs.runtime }}
+
+  # ── Deploy: pull imagen → deploy → health check ───────────────────────────
+  deploy:
+    name: 🔧 Deploy (${{ inputs.runtime }})
+    if: inputs.action == 'deploy'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ inputs.tag }}
+      environment: ${{ inputs.environment }}
+      runtime: ${{ inputs.runtime }}
+

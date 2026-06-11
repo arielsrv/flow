@@ -1,0 +1,20 @@
+# RUNTIME se configura en: Settings → Variables → RUNTIME = golang
+name: 🚀 Pipeline
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      action:      { description: "release | deploy", required: true,  type: choice, options: [release, deploy] }
+      tag:         { description: "v1.2.3",           required: false, type: string }
+      environment: { description: "dev|staging|prod", required: false, type: environment }
+jobs:
+  pipeline:
+    uses: YOUR_ORG/flow/.github/workflows/meta.yml@main
+    with:
+      runtime:     ${{ vars.RUNTIME }}
+      action:      ${{ inputs.action || 'ci' }}
+      tag:         ${{ inputs.tag || '' }}
+      environment: ${{ inputs.environment || '' }}
+
