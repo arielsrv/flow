@@ -11,7 +11,7 @@ on:
       environment: { description: "dev|staging|prod", required: false, type: environment }
 jobs:
   pipeline:
-    uses: YOUR_ORG/flow/.github/workflows/meta.yml@main
+    uses: YOUR_ORG/flow/.github/workflows/_meta.yml@main
     with:
       runtime:     ${{ vars.RUNTIME }}
       action:      ${{ inputs.action || 'ci' }}
